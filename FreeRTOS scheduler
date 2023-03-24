@@ -1,0 +1,336 @@
+
+/*
+Author: Swapnil H Vyas
+Date: 22/03/2023
+Lab 3 for Embedded software( RTOS )
+
+NOTES:
+
+
+
+*/
+#if CONFIG_FREERTOS_UNICORE
+#define ARDUINO_RUNNING_CORE 0
+#else
+#define ARDUINO_RUNNING_CORE 1
+#endif
+
+#include "driver/gpio.h" // freeRTOS interrupt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h" //include RTOS header files
+#define LED1        14 // define the output pin for the LED to produce the wave form in Task1
+#define Alarm       12 // task 4 led pin
+#define analogInput 27// input analog for task 4
+#define ledToggle   17 // this led is controlled by the pushButton inputß
+#define pushButton  13 //pushbutton input GPIO 13 (assignment 3)
+
+const byte  waveForm1 = 18; 
+const byte  waveForm2 = 16;  
+
+//struct frequency for two inputs
+typedef struct Freq
+{
+  float             Freq;               // frequency
+  float             prevFreq;
+  int               Score;              // Score 
+}Frequency;
+//Create two objects of class frequency, F1, F2
+Frequency F1; 
+Frequency F2;
+
+int counter = 0; //define a global counter, which will keep track of the number of times the callback function is already executed.
+int task5_Counter = 0;
+
+
+void task1(void *pvParameters);
+void task2(void *pvParameters);
+void task3(void *pvParameters);
+void task4(void *pvParameters);
+void logInformation1(void *pvParameters);
+void logInformation2(void *pvParameters);
+void task6_monitorInput(void *pvParameters);
+void task7_ledState(void *pvParameters);
+
+void setup()
+{
+  Serial.begin(115200);
+  pinMode(LED1, OUTPUT);//task 1 
+  pinMode(Alarm, OUTPUT);//task 4
+  pinMode(analogInput,INPUT);// set analog pin to input 
+  pinMode(waveForm1,INPUT);//task 2, set input pull up resistor
+  pinMode(waveForm2,INPUT);//task 3
+  pinMode(ledToggle, OUTPUT); // sets the output for the new task (task 6)
+  pinMode(pushButton, INPUT); // sets the input pushbutton required for task 7
+  
+  xTaskCreate(task1,    //task to be called
+              "task1",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              7,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task 
+  
+  xTaskCreate(task2,    //task to be called
+              "task2",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              5,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+              
+  xTaskCreate(task3,    //task to be called
+              "task3",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              6,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+
+  xTaskCreate(task4,    //task to be called
+              "task4",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              5,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+
+  xTaskCreate(logInformation1,    //task to be called
+              "part 1 of task 5",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              4,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+    
+  xTaskCreate(logInformation2,    //task to be called
+              "part 2 of task 5",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              4,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+  
+xTaskCreate(task6_monitorInput,    //task to be called
+              "task 6",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              3,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+
+xTaskCreate(task7_ledState,    //task to be called
+              "task 7",  // name of task
+              4096,     // stack size
+              NULL,     // parameter to pass to function
+              3,       // set priority of the task 0-24, where 24 is highest priority
+              NULL);    // handle which is used to change the function of the task
+  
+
+}
+
+void task1(void *pvParameters)
+{
+  (void) pvParameters;
+  for(;;) // A Task shall never return or exit.
+  {
+    digitalWrite(LED1,HIGH); // turn LED ON for 200uS, OFF for 50 uS, ON of 30uS then OFF again
+    delayMicroseconds(200); //200uS
+    digitalWrite(LED1,LOW);
+    delayMicroseconds(50); // 50uS
+    digitalWrite(LED1,HIGH);
+    delayMicroseconds(30); // 30uS
+    digitalWrite(LED1,LOW);
+  }
+}
+
+const int   maxRate = 1000; //set the maximum range of measured input frequency at 1000Hz as per specification
+int         minRate; // minrate will change depending on if it is waveForm1 or waveForm2
+float       maxScore = 99; // maximum the sotre can go to is 99
+float       factor; // a constant which is different for waveForm1 and waveForm2 and is set inside void score()
+int         scoreFreq; // the variable which stores the final score given to the input frequency
+int         range;  // variable which stores the range of the given frequency, eg- 500hz -1000hz
+
+//Function below returns the score of the input waveforms1/2
+void score(int minRate, float frequency)
+{
+  /*
+  This function takes in the minimum rate of the given frequency which may be 333hz or 500hz depending on the input  
+  and takes in the frequency of the respectice input to calculate the score given to it.
+  */  
+  
+  range = maxRate - minRate; 
+  factor = maxScore/(range); // set factor constant dependent on the relationship above
+  scoreFreq = factor*(frequency - minRate); // calculates the score
+  if(scoreFreq<0) // sets the score to 0 if frequency drops below minimum which is 333hZ for input 1 and 500Hz for input 2
+  {
+    scoreFreq =0;
+  }
+  if(scoreFreq>maxScore)
+  {
+    scoreFreq = 99;
+  }
+}
+
+/*
+  ________________________
+  |                       |
+  |<------duration------ >|
+  |                       |________________________
+  <--------------------period--------------------->
+*/
+unsigned long   duration;
+uint32_t        period;
+unsigned long   frequency = 0; //frequency is 1/period
+unsigned long   prevFreq1 = 0; //stores the previous valid frequency incase of absure values due to aliasing.
+bool            f1        = false;
+
+void calcFreq(int duration, bool f1)
+{
+
+  period = duration*2;  // please see diagram above fore reference
+  if(f1 == true) //sets F1 frequency if task 2 is running or else it sets the frequency to F2
+  {
+    if(period == 0)
+    {
+     F1.Freq = F1.prevFreq;
+    }
+    else
+    {
+      F1.Freq = 0.89*(1e6)*1/period; // multiply by 10^6 to get time in seconds
+                                     // 0.89 is an arbitrary constant to get the frequency back within acceptable limits.
+    }
+    if(F1.Freq>300 && F1.Freq<1100) F1.prevFreq = F1.Freq; // if frequency is within range then set the previous frequency to the new value
+    else// if frequency is not within range set new frequency to previous frequency
+    {
+      F1.Freq = F1.prevFreq;
+    }
+  }
+  else
+  {
+    if(period == 0) // in case of period is 0 , set freq to previous freq
+    {
+      F2.Freq = F2.prevFreq;
+    }
+    else
+    {
+      F2.Freq = 0.75*(1e6)*1/period; //multiple by 10^6 to get time in seconds, the 0.87 multiplier is an arbitrary number added to minimise the Frequency readiung error caused by the pulse in function
+    }
+    if(F2.Freq>500 && F2.Freq<1050) F2.prevFreq = F2.Freq;// if frequency is within range then set the previous frequency to the new value
+    else// if frequency is not within range set new frequency to previous frequency
+    {
+      F2.Freq = F2.prevFreq;
+    }    
+
+  }
+}
+
+void task2(void *pvParameters)
+{
+  (void) pvParameters;
+  for(;;)
+  {
+    f1 = true; // set f1 to true so it sets F1
+    duration = pulseIn(waveForm1, HIGH, 1650); //calculates the duration of the input being high, This function may sometimes cause aliasing due to the timing cycle
+    calcFreq(duration, f1); //calls function to calculate frequency and set that to F1
+    score(333, F1.Freq);   // call score to set factoring variable   
+    F1.Score = scoreFreq; //calculate score using the factoring variable
+  }
+}
+
+void task3(void *pvParameters)
+{
+  (void) pvParameters;
+  for(;;)
+  {  
+    f1 = false;  
+    duration = pulseIn(waveForm2, HIGH, 1100); //calculates the duration of the input being high
+    calcFreq(duration, f1); //calls function to calculate frequency and set that to F1
+    score(450, F2.Freq); //call score with input parameter og 500hz as minimum frequency range.
+    F2.Score = scoreFreq; //calculate score using the factoring variable
+  }  
+}
+
+
+int dataCount = 0; //stores which frame the data is in eg- 0-4
+int total; // sotires the toal of the 4 analogue input values
+int ave_Val = 0;
+int new_Val; // stores the analogue value
+
+
+void task4(void *pvParameters)
+{
+  (void) pvParameters;
+  for(;;)
+  {
+    dataCount++; //increments by 1
+    if(dataCount<5) // go into if statement only if there have been less than 4 values averaged
+    {
+      new_Val = analogRead(analogInput); //read the analog input
+      total =  total + new_Val; // add the value to the total variable
+    }
+    else
+    {
+      ave_Val = total/4; //caculates the average
+      dataCount = 0; // reset the variables
+      total = 0;
+    }
+    //whenever (average_analogue_in > half of maximum range
+    if(ave_Val > 4095/2 ) // 4095 is maximum range
+    {
+      digitalWrite(Alarm,HIGH); //turn alarm LED on if > half of maximum range
+    }
+    else
+    {
+     digitalWrite(Alarm,LOW); //turn led off if < half of maximum range
+    }
+  }
+}
+
+//Split task 5 into 2 so that execution time is half of 5200uS
+void logInformation1(void *pvParameters)
+{ 
+  (void) pvParameters;
+  for(;;)
+  {
+    Serial.println(F1.Score);
+  }
+}
+void logInformation2(void *pvParameters)
+{
+  (void) pvParameters;
+  for(;;)
+  {
+    Serial.print(F2.Score); //prints the score given to the second frequency 
+  }
+}
+
+void task6_monitorInput(void *pvParameters)
+{
+  (void) pvParameters;
+
+
+}
+
+int ledStateVal= 0;
+void task7_ledState(void *pvParameters)
+{
+  for(;;)
+  {
+    ledStateVal != ledStateVal;
+    digitalWrite(ledToggle, ledStateVal);
+  }
+
+}
+
+unsigned long timeItTook = 0;
+void timing_Test() //function to test the execution time for the tasks
+{
+  unsigned long bT = micros(); // starts counting microseconds
+  for (int i=0; i<1000; i++) // runs the respective task for 1000 iterations before returning a value of total time taken / 1000 .
+  {
+    //logInformation1(void *pvParameters); // call the task that needs measuring
+  }
+  unsigned long timeT = (bT - timeItTook)/1000;
+  timeItTook = bT;
+  Serial.println("Duration SerialOutput Job = "); // print time in uS
+  Serial.println(timeT);
+}
+
+void loop() 
+{
+  //not used
+}
+
