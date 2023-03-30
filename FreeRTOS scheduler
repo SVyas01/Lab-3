@@ -5,10 +5,8 @@ Date: 22/03/2023
 Lab 3 for Embedded software( RTOS )
 
 NOTES:
-
-
-
 */
+
 #if CONFIG_FREERTOS_UNICORE
 #define ARDUINO_RUNNING_CORE 0
 #else
@@ -38,8 +36,9 @@ typedef struct Freq
 Frequency F1; 
 Frequency F2;
 
-int counter = 0; //define a global counter, which will keep track of the number of times the callback function is already executed.
-int task5_Counter = 0;
+static const uint8_t queue_len = 5;   //set the length of the queue used for task 6/7 to 5
+static QueueHandle_t queue; //Global
+
 
 
 void task1(void *pvParameters);
@@ -51,6 +50,8 @@ void logInformation2(void *pvParameters);
 void task6_monitorInput(void *pvParameters);
 void task7_ledState(void *pvParameters);
 
+SemaphoreHandle_t xSemaphore;
+
 void setup()
 {
   Serial.begin(115200);
@@ -61,7 +62,9 @@ void setup()
   pinMode(waveForm2,INPUT);//task 3
   pinMode(ledToggle, OUTPUT); // sets the output for the new task (task 6)
   pinMode(pushButton, INPUT); // sets the input pushbutton required for task 7
-  
+  xSemaphore = xSemaphoreCreateBinary();
+  queue = xQueueCreate(queue_len, sizeof(int)); //create a queue of size 5
+
   xTaskCreate(task1,    //task to be called
               "task1",  // name of task
               4096,     // stack size
@@ -288,6 +291,7 @@ void logInformation1(void *pvParameters)
     Serial.println(F1.Score);
   }
 }
+
 void logInformation2(void *pvParameters)
 {
   (void) pvParameters;
@@ -297,20 +301,36 @@ void logInformation2(void *pvParameters)
   }
 }
 
+  int sendQueueVal = 0;
 void task6_monitorInput(void *pvParameters)
 {
   (void) pvParameters;
-
-
-}
-
-int ledStateVal= 0;
-void task7_ledState(void *pvParameters)
-{
+  int buttonVal; // 0 or 1
   for(;;)
   {
-    ledStateVal != ledStateVal;
-    digitalWrite(ledToggle, ledStateVal);
+    buttonVal = digitalRead(pushButton); //read the button value and send to the queue
+     if(buttonVal == 1)
+    {
+      sendQueueVal += 1;
+      if (sendQueueVal >1)
+      {
+        sendQueueVal = 0;
+      }
+    }
+    xQueueSend(queue, (void*)&sendQueueVal,0);
+  }
+}
+
+void task7_ledState(void *pvParameters)
+{
+  (void) pvParameters;
+  int ledStateVal;
+  for(;;)
+  {
+    if(xQueueReceive(queue, (void*)&ledStateVal, 0)== pdTRUE)
+    {
+      digitalWrite(ledToggle, ledStateVal);      
+    }
   }
 
 }
@@ -333,4 +353,3 @@ void loop()
 {
   //not used
 }
-
