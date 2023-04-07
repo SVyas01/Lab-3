@@ -1,0 +1,11 @@
+
+void taskx(void *pvParameters)
+{
+  // ...
+  // Task code here
+  // ...
+  UBaseType_t uxHighWaterMark;
+  uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL ).
+  // uxHighWaterMark now contains the high-water mark value
+  // You can print it, store it, or use it for further analysis
+}
