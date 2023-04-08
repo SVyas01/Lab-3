@@ -37,15 +37,15 @@ SemaphoreHandle_t mutex; // using this mutex to protect the struct
 static const uint8_t queue_len = 5;   //set the length of the queue used for task 6/7 to 5
 static QueueHandle_t queue; //Global
 
-//Ticker delay for the tasks
-const TickType_t xDelay1 = 4 / portTICK_PERIOD_MS;
-const TickType_t xDelay2 = 20 / portTICK_PERIOD_MS;
-const TickType_t xDelay3 = 8 / portTICK_PERIOD_MS;
-const TickType_t xDelay4 = 20 / portTICK_PERIOD_MS;
-const TickType_t xDelay5 = 100 / portTICK_PERIOD_MS;
-const TickType_t xDelay6 = 100 / portTICK_PERIOD_MS;
-const TickType_t xDelay7 = 10/ portTICK_PERIOD_MS;
-const TickType_t xDelay8 = 40 / portTICK_PERIOD_MS;
+//Ticker delay for the tasks, defines the periods
+const TickType_t xDelay1 = 4 / portTICK_PERIOD_MS;    //task 1
+const TickType_t xDelay2 = 20 / portTICK_PERIOD_MS;   //task 2
+const TickType_t xDelay3 = 8 / portTICK_PERIOD_MS;    //task 3
+const TickType_t xDelay4 = 20 / portTICK_PERIOD_MS;   //task 4
+const TickType_t xDelay5 = 100 / portTICK_PERIOD_MS;  //task 5a
+const TickType_t xDelay6 = 100 / portTICK_PERIOD_MS;  //task 5b
+const TickType_t xDelay7 = 10/ portTICK_PERIOD_MS;    //task 6
+const TickType_t xDelay8 = 10 / portTICK_PERIOD_MS;   //task 7
 
 void task1(void *pvParameters);
 void task2(void *pvParameters);
@@ -68,60 +68,59 @@ void setup()
   pinMode(pushButton, INPUT); // sets the input pushbutton required for task 7
   mutex = xSemaphoreCreateMutex(); // create mutex
   queue = xQueueCreate(queue_len, sizeof(bool)); //create a queue of size 5
-
   xTaskCreate(task1,    //task to be called
               "task1",  // name of task
-              512,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
               3,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task 
 
   xTaskCreate(task2,    //task to be called
               "task2",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
-              1,       // set priority of the task 0-24, where 24 is highest priority
+              2,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
 
 
   xTaskCreate(task3,    //task to be called
               "task3",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
-              1,       // set priority of the task 0-24, where 24 is highest priority
+              3,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
 
   xTaskCreate(task4,    //task to be called
               "task4",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
-              1,       // set priority of the task 0-24, where 24 is highest priority
+              2,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
 
   xTaskCreate(logInformation1,    //task to be called
               "part 1 of task 5",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
               1,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
     
   xTaskCreate(logInformation2,    //task to be called
               "part 2 of task 5",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
               1,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
 
   xTaskCreate(task6_monitorInput,    //task to be called
               "task 6",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
               2,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
 
   xTaskCreate(task7_ledState,    //task to be called
               "task 7",  // name of task
-              4096,     // stack size
+              1024,     // stack size
               NULL,     // parameter to pass to function
               2,       // set priority of the task 0-24, where 24 is highest priority
               NULL);    // handle which is used to change the function of the task
@@ -144,6 +143,8 @@ void task1(void *pvParameters)
     vTaskDelay(xDelay1);  
   }
 }
+
+
 
 const int   maxRate = 1000; //set the maximum range of measured input frequency at 1000Hz as per specification
 int         minRate; // minrate will change depending on if it is waveForm1 or waveForm2
@@ -266,8 +267,6 @@ int dataCount = 0; //stores which frame the data is in eg- 0-4
 int total; // sotires the toal of the 4 analogue input values
 int ave_Val = 0;
 int new_Val; // stores the analogue value
-
-
 void task4(void *pvParameters)
 {
   (void) pvParameters;
@@ -331,22 +330,26 @@ void task6_monitorInput(void *pvParameters)
   for(;;)
   {  
     buttonVal = digitalRead(pushButton); //read the button value and send to the queue
-    if(buttonVal && !lastButtonState)
+    //If the current state of the button is high and last state is low then enter if statement
+    if(buttonVal && !lastButtonState) 
     {
-      lastButtonState = 1;
-      pressed = 1;      
+      lastButtonState = 1; // set last state to current state which is 1
+      pressed = 1;      // tell the program that the button has been pressed
     }
     if(pressed)
     {
-      sendQueueVal = (sendQueueVal +1) % 2;
-      pressed = 0;
+      //sends the value to the queue everytime button is pressed. the value sent is 0/1
+      sendQueueVal = (sendQueueVal +1) % 2;//every time button is pressed increment this variable and use 2 modulus to set it to 0 or 1
+      pressed = 0; //reset pressed
     }
+    //if current state is low and last stae is high then enter else if
     else if(!buttonVal && lastButtonState)
     {
       lastButtonState = 0;
     }
-    xQueueSend(queue, (void*)&sendQueueVal,1);
-    vTaskDelay(xDelay7);  
+    //naturally this code will debounce the button
+    xQueueSend(queue, (void*)&sendQueueVal,1); //send value to queue
+    vTaskDelay(xDelay7);  //delay for the period defined for task 7
   }
 }
 
@@ -372,7 +375,7 @@ void timing_Test() //function to test the execution time for the tasks
   unsigned long bT = micros(); // starts counting microseconds
   for (int i=0; i<1000; i++) // runs the respective task for 1000 iterations before returning a value of total time taken / 1000 .
   {
-
+    //task here
   }
   unsigned long timeT = (bT - timeItTook)/1000;
   timeItTook = bT;
@@ -382,5 +385,4 @@ void timing_Test() //function to test the execution time for the tasks
 
 void loop() 
 {
-
 }
